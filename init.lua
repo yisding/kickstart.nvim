@@ -279,6 +279,12 @@ do
   --  version control to get reproducible plugin versions across machines.
   --  See `:help vim.pack-lockfile`
   --
+  --  To remove a plugin, first delete its `vim.pack.add` call (and any
+  --  related configuration) from this file, or it will just be reinstalled.
+  --  Then `:restart` and delete it from disk by running
+  --    :lua vim.pack.del({ 'plugin-name' })
+  --  See `:help vim.pack.del()`
+  --
   --  Throughout the rest of the config there will be examples
   --  of how to install and configure plugins using `vim.pack`.
   --
@@ -316,6 +322,7 @@ do
         return
       end
 
+      -- NOTE: nvim-treesitter is archived upstream; see the note in the Treesitter section below.
       if name == 'nvim-treesitter' then
         if not ev.data.active then vim.cmd.packadd 'nvim-treesitter' end
         vim.cmd 'TSUpdate'
@@ -531,35 +538,41 @@ do
 
   -- Add Telescope-based LSP pickers when an LSP attaches to a buffer.
   -- If you later switch picker plugins, this is where to update these mappings.
+  -- NOTE: the `buf` key makes each keymap local to one buffer; it was named `buffer` before Neovim 0.12 (see `:help deprecated-0.12`).
+  --
+  -- NOTE: Neovim ships built-in LSP mappings on these same keys: grr, gri, gO,
+  --  and (new in 0.12) grt, plus grn, gra, and grx (run codelens). See
+  --  `:help lsp-defaults`. The buffer-local maps below shadow the built-ins
+  --  with Telescope pickers; delete them to fall back to the plugin-free defaults.
   vim.api.nvim_create_autocmd('LspAttach', {
     group = vim.api.nvim_create_augroup('telescope-lsp-attach', { clear = true }),
     callback = function(event)
       local buf = event.buf
 
       -- Find references for the word under your cursor.
-      vim.keymap.set('n', 'grr', builtin.lsp_references, { buffer = buf, desc = '[G]oto [R]eferences' })
+      vim.keymap.set('n', 'grr', builtin.lsp_references, { buf = buf, desc = '[G]oto [R]eferences' })
 
       -- Jump to the implementation of the word under your cursor.
       -- Useful when your language has ways of declaring types without an actual implementation.
-      vim.keymap.set('n', 'gri', builtin.lsp_implementations, { buffer = buf, desc = '[G]oto [I]mplementation' })
+      vim.keymap.set('n', 'gri', builtin.lsp_implementations, { buf = buf, desc = '[G]oto [I]mplementation' })
 
       -- Jump to the definition of the word under your cursor.
       -- This is where a variable was first declared, or where a function is defined, etc.
       -- To jump back, press <C-t>.
-      vim.keymap.set('n', 'grd', builtin.lsp_definitions, { buffer = buf, desc = '[G]oto [D]efinition' })
+      vim.keymap.set('n', 'grd', builtin.lsp_definitions, { buf = buf, desc = '[G]oto [D]efinition' })
 
       -- Fuzzy find all the symbols in your current document.
       -- Symbols are things like variables, functions, types, etc.
-      vim.keymap.set('n', 'gO', builtin.lsp_document_symbols, { buffer = buf, desc = 'Open Document Symbols' })
+      vim.keymap.set('n', 'gO', builtin.lsp_document_symbols, { buf = buf, desc = 'Open Document Symbols' })
 
       -- Fuzzy find all the symbols in your current workspace.
       -- Similar to document symbols, except searches over your entire project.
-      vim.keymap.set('n', 'gW', builtin.lsp_dynamic_workspace_symbols, { buffer = buf, desc = 'Open Workspace Symbols' })
+      vim.keymap.set('n', 'gW', builtin.lsp_dynamic_workspace_symbols, { buf = buf, desc = 'Open Workspace Symbols' })
 
       -- Jump to the type of the word under your cursor.
       -- Useful when you're not sure what type a variable is and you want to see
       -- the definition of its *type*, not where it was *defined*.
-      vim.keymap.set('n', 'grt', builtin.lsp_type_definitions, { buffer = buf, desc = '[G]oto [T]ype Definition' })
+      vim.keymap.set('n', 'grt', builtin.lsp_type_definitions, { buf = buf, desc = '[G]oto [T]ype Definition' })
     end,
   })
 
@@ -639,7 +652,7 @@ do
       -- for LSP related items. It sets the mode, buffer and description for us each time.
       local map = function(keys, func, desc, mode)
         mode = mode or 'n'
-        vim.keymap.set(mode, keys, func, { buffer = event.buf, desc = 'LSP: ' .. desc })
+        vim.keymap.set(mode, keys, func, { buf = event.buf, desc = 'LSP: ' .. desc })
       end
 
       -- Rename the variable under your cursor.
@@ -663,13 +676,13 @@ do
       if client and client:supports_method('textDocument/documentHighlight', event.buf) then
         local highlight_augroup = vim.api.nvim_create_augroup('kickstart-lsp-highlight', { clear = false })
         vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
-          buffer = event.buf,
+          buf = event.buf,
           group = highlight_augroup,
           callback = vim.lsp.buf.document_highlight,
         })
 
         vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI' }, {
-          buffer = event.buf,
+          buf = event.buf,
           group = highlight_augroup,
           callback = vim.lsp.buf.clear_references,
         })
@@ -678,7 +691,7 @@ do
           group = vim.api.nvim_create_augroup('kickstart-lsp-detach', { clear = true }),
           callback = function(event2)
             vim.lsp.buf.clear_references()
-            vim.api.nvim_clear_autocmds { group = 'kickstart-lsp-highlight', buffer = event2.buf }
+            vim.api.nvim_clear_autocmds { group = 'kickstart-lsp-highlight', buf = event2.buf }
           end,
         })
       end
@@ -747,6 +760,9 @@ do
   vim.pack.add {
     gh 'neovim/nvim-lspconfig',
     gh 'mason-org/mason.nvim',
+    -- Maps LSP server names between nvim-lspconfig (e.g. `lua_ls`) and Mason packages
+    -- (e.g. `lua-language-server`) so mason-tool-installer below can install the servers
+    -- listed in `servers`. It is only used as a lookup table, so it needs no `setup()` call.
     gh 'mason-org/mason-lspconfig.nvim',
     gh 'WhoIsSethDaniel/mason-tool-installer.nvim',
   }
@@ -761,6 +777,12 @@ do
   --    :Mason
   --
   -- You can press `g?` for help in this menu.
+  --
+  -- NOTE: On the very first start, these tools are installed in the background,
+  -- and a language server can only attach to files opened *after* its install
+  -- has finished. If a server is missing from a file you already have open
+  -- (you may also see a one-time "lua-language-server is not executable" entry
+  -- in `:LspLog`), just reopen the file or use `:restart`.
   local ensure_installed = vim.tbl_keys(servers or {})
   vim.list_extend(ensure_installed, {
     -- Tools that are not language servers (formatters, linters, etc.) go here,
@@ -781,6 +803,10 @@ do
   --  - `:lsp` - interactively inspect, enable/disable, restart and view logs
   --    of LSP clients. See `:help :lsp`
   --
+  --  - `:checkhealth vim.lsp` - shows which servers are enabled and attached
+  --    to which buffers, server versions, and active features. A great first
+  --    step when a language server isn't working.
+  --
   --  - Inline ("ghost text") completion for servers that support it, such as
   --    `copilot-language-server`. Try it with:
   --      vim.lsp.inline_completion.enable()
@@ -789,6 +815,11 @@ do
   --        if not vim.lsp.inline_completion.get() then return '<Tab>' end
   --      end, { expr = true, desc = 'Accept inline completion' })
   --    See `:help lsp-inline_completion`
+  --
+  --  - Color references (like `#rrggbb` in CSS) are highlighted automatically
+  --    for servers that support it. This is on by default; toggle it with:
+  --      vim.lsp.document_color.enable(not vim.lsp.document_color.is_enabled())
+  --    See `:help lsp-document_color`
 end
 
 -- ============================================================
@@ -837,9 +868,14 @@ end
 do
   -- NOTE: As of 0.12, Neovim has built-in insert-mode autocompletion:
   --    vim.o.autocomplete = true
-  --  It is powered by attached LSP clients (see `:help 'autocomplete'` and
-  --  `:help lsp-autocompletion`), and built-in snippets (`:help vim.snippet`)
-  --  handle expansion.
+  --  Menu items come from the sources in the 'complete' option, which by
+  --  default scans your open buffers and tags - not the LSP! To include LSP
+  --  results, add the "o" flag, which completes via 'omnifunc' (Neovim's LSP
+  --  client sets that to vim.lsp.omnifunc automatically, see `:help lsp-defaults`):
+  --    vim.o.complete = 'o,.^5,w^5,b^5,u^5'
+  --  (the "^5" caps each source at 5 candidates). Built-in snippets
+  --  (`:help vim.snippet`) handle expansion. For more, see `:help 'autocomplete'`,
+  --  `:help ins-autocompletion`, and `:help lsp-completion`.
   --
   --  Kickstart uses blink.cmp below instead, because it provides fuzzy
   --  matching, more sources, and snippet integration out of the box. If you
@@ -933,6 +969,13 @@ do
   --  See `:help nvim-treesitter-intro`
 
   -- NOTE: You can also specify a branch or a specific commit
+  --
+  -- NOTE: nvim-treesitter was archived upstream in April 2026. It still works fine on
+  --  Neovim 0.12 (the exact revision is pinned in `nvim-pack-lock.json`), but it will
+  --  no longer receive new parsers or query fixes. A community continuation exists at
+  --  https://github.com/neovim-treesitter/nvim-treesitter, but it is an incompatible
+  --  rewrite, so don't just swap the URL. Watch nvim-lua/kickstart.nvim for the
+  --  eventual migration.
   vim.pack.add { { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' } }
 
   -- Ensure basic parsers are installed

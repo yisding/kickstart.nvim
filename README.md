@@ -17,11 +17,13 @@ A starting point for Neovim that is:
 Kickstart.nvim targets *only* the latest
 ['stable'](https://github.com/neovim/neovim/releases/tag/stable) and latest
 ['nightly'](https://github.com/neovim/neovim/releases/tag/nightly) of Neovim.
+It requires **Neovim 0.12 or later** — it uses Neovim's built-in `vim.pack`
+plugin manager, which does not exist in older versions.
 If you are experiencing issues, please make sure you have at least the latest
 stable version. Most likely, you want to install neovim via a [package
 manager](https://github.com/neovim/neovim/blob/master/INSTALL.md#install-from-package).
-To check your neovim version, run `nvim --version` and make sure it is not
-below the latest
+To check your neovim version, run `nvim --version` and make sure it is at
+least `0.12` and not below the latest
 ['stable'](https://github.com/neovim/neovim/releases/tag/stable) version. If
 your chosen install method only gives you an outdated version of neovim, find
 alternative [installation methods below](#alternative-neovim-installation-methods).
@@ -114,7 +116,8 @@ nvim
 That's it! `vim.pack` will install all the plugins from your config. Use
 `:lua vim.pack.update(nil, { offline = true })` to inspect plugin state and
 `:lua vim.pack.update()` to fetch updates (`:write` applies updates, `:quit`
-cancels them).
+cancels them). After updating, run `:restart` (new in Neovim 0.12) to restart
+Neovim and start using the updated plugins.
 
 #### Read The Friendly Documentation
 
@@ -129,6 +132,11 @@ examples of adding popularly requested plugins.
 ### Getting Started
 
 [The Only Video You Need to Get Started with Neovim](https://youtu.be/m8C0Cq9Uv9o)
+
+> [!NOTE]
+> The video predates kickstart's migration to Neovim's built-in `vim.pack`
+> plugin manager, so the plugin-management parts (lazy.nvim, `:Lazy`) no longer
+> match this config. Everything else it teaches still applies.
 
 ### FAQ
 
@@ -177,11 +185,11 @@ Recommended: install `make` (see the chocolatey section below).
 
 If you want a CMake-only setup, customize `init.lua` in two places:
 
-1. Include `telescope-fzf-native.nvim` when `cmake` is available:
+1. Include `telescope-fzf-native.nvim` when `cmake` is available (replace the existing `make`-only check in the `SEARCH & NAVIGATION` section of `init.lua`):
 
 ```lua
 if vim.fn.executable 'make' == 1 or vim.fn.executable 'cmake' == 1 then
-  table.insert(plugins, gh 'nvim-telescope/telescope-fzf-native.nvim')
+  table.insert(telescope_plugins, gh 'nvim-telescope/telescope-fzf-native.nvim')
 end
 ```
 
