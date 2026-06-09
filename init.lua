@@ -391,6 +391,8 @@ do
     spec = {
       { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } },
       { '<leader>t', group = '[T]oggle' },
+      { '<leader>T', group = '[T]est' }, -- see kickstart.plugins.neotest
+      { '<leader>o', group = '[O]verseer tasks' }, -- see kickstart.plugins.overseer
       { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } }, -- Enable gitsigns recommended keymaps first
       { 'gr', group = 'LSP Actions', mode = { 'n' } },
     },
@@ -703,6 +705,19 @@ do
       if client and client:supports_method('textDocument/inlayHint', event.buf) then
         map('<leader>th', function() vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled { bufnr = event.buf }) end, '[T]oggle Inlay [H]ints')
       end
+
+      -- Ghost-text suggestions from AI servers (like the `copilot` entry in the
+      -- `servers` table below) use Neovim 0.12's built-in inline completion.
+      -- It is off by default, so turn it on whenever a capable server attaches.
+      --    See `:help lsp-inline_completion`
+      if client and client:supports_method('textDocument/inlineCompletion', event.buf) then
+        vim.lsp.inline_completion.enable(true, { bufnr = event.buf })
+
+        -- Alt-l accepts the current suggestion, Alt-] cycles to the next one.
+        -- (We leave <Tab> alone: blink.cmp uses it for snippets, see SECTION 7)
+        vim.keymap.set('i', '<M-l>', function() vim.lsp.inline_completion.get() end, { buf = event.buf, desc = 'LSP: Accept inline completion' })
+        vim.keymap.set('i', '<M-]>', function() vim.lsp.inline_completion.select() end, { buf = event.buf, desc = 'LSP: Next inline completion' })
+      end
     end,
   })
 
@@ -713,14 +728,48 @@ do
   local servers = {
     -- clangd = {},
     -- gopls = {},
-    -- pyright = {},
     -- rust_analyzer = {},
+
+    -- [[ TypeScript / JavaScript ]]
     --
-    -- Some languages (like typescript) have entire language plugins that can be useful:
-    --    https://github.com/pmizio/typescript-tools.nvim
+    -- vtsls wraps the same TypeScript language service that powers VS Code, so
+    -- you get the full feature set: auto-imports, organize imports, renaming a
+    -- file updates its imports, inlay hints. The lighter `ts_ls` works too.
+    -- NOTE: TypeScript 7 ships a native language server, `tsgo`, that is much
+    --  faster but still missing most code actions. To try it, replace `vtsls`
+    --  with `tsgo = {}`. See https://github.com/microsoft/typescript-go
+    vtsls = {},
+    -- Runs your project's own ESLint for diagnostics and code actions, and
+    -- adds the `:LspEslintFixAll` command. It only attaches in projects that
+    -- have an ESLint config file.
+    eslint = {},
+
+    -- [[ Python ]]
     --
-    -- But for many setups, the LSP (`ts_ls`) will work just fine
-    -- ts_ls = {},
+    -- basedpyright is a maintained fork of pyright, the type checker behind
+    -- VS Code's Pylance, with some formerly-proprietary features added back.
+    -- It finds your project's virtualenv automatically (with `uv`, the `.venv`
+    -- in the project root just works) - same for ruff below.
+    basedpyright = {
+      settings = {
+        basedpyright = {
+          -- ruff (below) organizes imports, so disable basedpyright's version
+          disableOrganizeImports = true,
+        },
+      },
+    },
+    -- ruff is an extremely fast linter and import organizer (it replaces
+    -- flake8 and isort). Python *formatting* also goes through ruff, but via
+    -- conform.nvim - see SECTION 6.
+    ruff = {},
+
+    -- [[ AI ]]
+    --
+    -- GitHub Copilot suggestions, shown as ghost text through Neovim 0.12's
+    -- built-in inline completion (wired up in the LspAttach autocmd above).
+    -- Requires a Copilot subscription: the first time, run `:LspCopilotSignIn`
+    -- from a code buffer. Delete this line if you don't want Copilot.
+    copilot = {},
 
     -- Special Lua Config, as recommended by neovim help docs
     lua_ls = {
@@ -788,6 +837,8 @@ do
     -- Tools that are not language servers (formatters, linters, etc.) go here,
     -- not in `servers` above, so they don't get registered as LSP configs.
     'stylua', -- Used to format Lua code
+    'prettierd', -- Used to format JS/TS (a daemonized prettier, for speed)
+    'prettier', -- Fallback for when prettierd isn't available
     -- You can add other tools here that you want Mason to install
   })
 
@@ -798,6 +849,17 @@ do
     vim.lsp.enable(name)
   end
 
+  -- ruff and basedpyright overlap on a few capabilities. Let the type checker
+  -- own hover documentation, as recommended by the ruff editor docs:
+  --    https://docs.astral.sh/ruff/editors/setup/
+  vim.api.nvim_create_autocmd('LspAttach', {
+    group = vim.api.nvim_create_augroup('kickstart-ruff-hover', { clear = true }),
+    callback = function(event)
+      local client = vim.lsp.get_client_by_id(event.data.client_id)
+      if client and client.name == 'ruff' then client.server_capabilities.hoverProvider = false end
+    end,
+  })
+
   -- NOTE: More LSP goodies built into Neovim 0.12:
   --
   --  - `:lsp` - interactively inspect, enable/disable, restart and view logs
@@ -807,13 +869,9 @@ do
   --    to which buffers, server versions, and active features. A great first
   --    step when a language server isn't working.
   --
-  --  - Inline ("ghost text") completion for servers that support it, such as
-  --    `copilot-language-server`. Try it with:
-  --      vim.lsp.inline_completion.enable()
-  --    and a keymap to accept the suggestion:
-  --      vim.keymap.set('i', '<Tab>', function()
-  --        if not vim.lsp.inline_completion.get() then return '<Tab>' end
-  --      end, { expr = true, desc = 'Accept inline completion' })
+  --  - Inline ("ghost text") completion for servers that support it. Kickstart
+  --    wires this up for the `copilot` server in the LspAttach autocmd above
+  --    (`<M-l>` accepts a suggestion, `<M-]>` cycles to the next one).
   --    See `:help lsp-inline_completion`
   --
   --  - Color references (like `#rrggbb` in CSS) are highlighted automatically
@@ -850,11 +908,20 @@ do
     formatters_by_ft = {
       lua = { 'stylua' }, -- Installed via Mason in the LSP section above
       -- rust = { 'rustfmt' },
-      -- Conform can also run multiple formatters sequentially
-      -- python = { "isort", "black" },
       --
-      -- You can use 'stop_after_first' to run the first available formatter from the list
-      -- javascript = { "prettierd", "prettier", stop_after_first = true },
+      -- Conform can also run multiple formatters sequentially:
+      -- ruff organizes imports and then formats, replacing the old
+      -- `{ 'isort', 'black' }` combo. The ruff binary is installed with the
+      -- ruff language server in the LSP section above.
+      python = { 'ruff_organize_imports', 'ruff_format' },
+      --
+      -- You can use 'stop_after_first' to run the first available formatter
+      -- from the list: prefer the prettierd daemon (it's much faster), and
+      -- fall back to plain prettier. Both are installed by Mason above.
+      javascript = { 'prettierd', 'prettier', stop_after_first = true },
+      javascriptreact = { 'prettierd', 'prettier', stop_after_first = true },
+      typescript = { 'prettierd', 'prettier', stop_after_first = true },
+      typescriptreact = { 'prettierd', 'prettier', stop_after_first = true },
     },
   }
 
@@ -979,7 +1046,25 @@ do
   vim.pack.add { { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' } }
 
   -- Ensure basic parsers are installed
-  local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+  local parsers = {
+    'bash',
+    'c',
+    'diff',
+    'html',
+    'javascript',
+    'jsdoc',
+    'json',
+    'lua',
+    'luadoc',
+    'markdown',
+    'markdown_inline',
+    'python',
+    'query',
+    'tsx', -- for .tsx files (.jsx is covered by the javascript parser)
+    'typescript',
+    'vim',
+    'vimdoc',
+  }
   require('nvim-treesitter').install(parsers)
 
   ---@param buf integer
@@ -1041,7 +1126,9 @@ do
   --  Here are some example plugins that I've included in the Kickstart repository.
   --  Uncomment any of the lines below to enable them (then use `:restart` to reload nvim).
   --
-  -- require 'kickstart.plugins.debug'
+  require 'kickstart.plugins.debug' -- debugger (DAP) for TS/JS, Python, and Go
+  require 'kickstart.plugins.neotest' -- run tests (pytest, vitest) from inside Neovim
+  require 'kickstart.plugins.overseer' -- task runner for npm scripts, make, and VS Code tasks.json
   -- require 'kickstart.plugins.indent_line'
   -- require 'kickstart.plugins.lint'
   -- require 'kickstart.plugins.autopairs'
