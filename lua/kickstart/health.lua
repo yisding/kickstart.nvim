@@ -21,7 +21,8 @@ end
 
 local check_external_reqs = function()
   -- Basic utils: `git`, `make`, `unzip`
-  for _, exe in ipairs { 'git', 'make', 'unzip', 'rg' } do
+  -- The `tree-sitter` CLI is required by nvim-treesitter (main branch) to build parsers
+  for _, exe in ipairs { 'git', 'make', 'unzip', 'rg', 'tree-sitter' } do
     local is_executable = vim.fn.executable(exe) == 1
     if is_executable then
       vim.health.ok(string.format("Found executable: '%s'", exe))

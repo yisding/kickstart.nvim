@@ -172,6 +172,11 @@ do
   -- See `:help 'confirm'`
   vim.o.confirm = true
 
+  -- Default border for all floating windows (LSP hover, signature help,
+  -- diagnostics, etc.). Plugins that set their own border are unaffected.
+  -- See `:help 'winborder'`
+  vim.o.winborder = 'rounded'
+
   -- [[ Basic Keymaps ]]
   --  See `:help vim.keymap.set()`
 
@@ -184,7 +189,7 @@ do
   vim.diagnostic.config {
     update_in_insert = false,
     severity_sort = true,
-    float = { border = 'rounded', source = 'if_many' },
+    float = { source = 'if_many' }, -- The float border is handled by the 'winborder' option above
     underline = { severity = { min = vim.diagnostic.severity.WARN } },
 
     -- Can switch between these as you prefer
@@ -266,6 +271,13 @@ do
   --  To update plugins, run
   --    :lua vim.pack.update()
   --
+  --  After installing or updating plugins, use the `:restart` command
+  --  (new in Neovim 0.12) to restart Neovim and pick up the changes.
+  --
+  --  vim.pack records the exact revision of every installed plugin in a
+  --  lockfile (`nvim-pack-lock.json`, next to this init.lua). Commit it to
+  --  version control to get reproducible plugin versions across machines.
+  --  See `:help vim.pack-lockfile`
   --
   --  Throughout the rest of the config there will be examples
   --  of how to install and configure plugins using `vim.pack`.
@@ -697,8 +709,6 @@ do
     -- But for many setups, the LSP (`ts_ls`) will work just fine
     -- ts_ls = {},
 
-    stylua = {}, -- Used to format Lua code
-
     -- Special Lua Config, as recommended by neovim help docs
     lua_ls = {
       on_init = function(client)
@@ -753,6 +763,9 @@ do
   -- You can press `g?` for help in this menu.
   local ensure_installed = vim.tbl_keys(servers or {})
   vim.list_extend(ensure_installed, {
+    -- Tools that are not language servers (formatters, linters, etc.) go here,
+    -- not in `servers` above, so they don't get registered as LSP configs.
+    'stylua', -- Used to format Lua code
     -- You can add other tools here that you want Mason to install
   })
 
@@ -762,6 +775,20 @@ do
     vim.lsp.config(name, server)
     vim.lsp.enable(name)
   end
+
+  -- NOTE: More LSP goodies built into Neovim 0.12:
+  --
+  --  - `:lsp` - interactively inspect, enable/disable, restart and view logs
+  --    of LSP clients. See `:help :lsp`
+  --
+  --  - Inline ("ghost text") completion for servers that support it, such as
+  --    `copilot-language-server`. Try it with:
+  --      vim.lsp.inline_completion.enable()
+  --    and a keymap to accept the suggestion:
+  --      vim.keymap.set('i', '<Tab>', function()
+  --        if not vim.lsp.inline_completion.get() then return '<Tab>' end
+  --      end, { expr = true, desc = 'Accept inline completion' })
+  --    See `:help lsp-inline_completion`
 end
 
 -- ============================================================
@@ -790,6 +817,7 @@ do
     },
     -- You can also specify external formatters in here.
     formatters_by_ft = {
+      lua = { 'stylua' }, -- Installed via Mason in the LSP section above
       -- rust = { 'rustfmt' },
       -- Conform can also run multiple formatters sequentially
       -- python = { "isort", "black" },
@@ -807,6 +835,16 @@ end
 -- blink.cmp and luasnip setup
 -- ============================================================
 do
+  -- NOTE: As of 0.12, Neovim has built-in insert-mode autocompletion:
+  --    vim.o.autocomplete = true
+  --  It is powered by attached LSP clients (see `:help 'autocomplete'` and
+  --  `:help lsp-autocompletion`), and built-in snippets (`:help vim.snippet`)
+  --  handle expansion.
+  --
+  --  Kickstart uses blink.cmp below instead, because it provides fuzzy
+  --  matching, more sources, and snippet integration out of the box. If you
+  --  prefer a plugin-free setup, delete this section and try the built-in!
+
   -- [[ Snippet Engine ]]
 
   -- NOTE: You can also specify plugin using a version range for its git tag.
@@ -958,7 +996,7 @@ do
   -- NOTE: Next step on your Neovim journey: Add/Configure additional plugins for Kickstart
   --
   --  Here are some example plugins that I've included in the Kickstart repository.
-  --  Uncomment any of the lines below to enable them (you will need to restart nvim).
+  --  Uncomment any of the lines below to enable them (then use `:restart` to reload nvim).
   --
   -- require 'kickstart.plugins.debug'
   -- require 'kickstart.plugins.indent_line'
